@@ -123,8 +123,7 @@ export async function waitForDeployment(
 
 export async function deployToVercel(
   businessName: string,
-  repoUrl: string,
-  businessType: string
+  repoUrl: string
 ): Promise<{
   deploymentUrl: string
   projectId: string

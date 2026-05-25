@@ -125,9 +125,7 @@ export async function POST(request: NextRequest) {
         .from('outreach')
         .update({
           reply_at: new Date().toISOString(),
-          classification: classification.classification,
           stage: 'portfolio_sent',
-          portfolio_sent_at: new Date().toISOString(),
         })
         .eq('id', unreplied.id)
 
@@ -157,7 +155,6 @@ export async function POST(request: NextRequest) {
         .from('outreach')
         .update({
           reply_at: new Date().toISOString(),
-          classification: classification.classification,
           stage: 'interested',
         })
         .eq('id', unreplied.id)
@@ -171,7 +168,6 @@ export async function POST(request: NextRequest) {
       .from('outreach')
       .update({
         reply_at: new Date().toISOString(),
-        classification: classification.classification,
         stage: 'uninterested',
       })
       .eq('id', unreplied.id)
@@ -189,7 +185,6 @@ export async function POST(request: NextRequest) {
     .from('outreach')
     .update({
       reply_at: new Date().toISOString(),
-      classification: classification.classification,
       stage: 'maybe_interested',
     })
     .eq('id', unreplied.id)

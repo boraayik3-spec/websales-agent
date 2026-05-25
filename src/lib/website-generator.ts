@@ -6,6 +6,7 @@ export interface BusinessInput {
   name: string
   type: BusinessType | null
   website: string | null
+  website_status?: string | null
 }
 
 export interface GeneratedWebsite {

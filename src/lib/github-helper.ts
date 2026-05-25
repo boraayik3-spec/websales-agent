@@ -26,8 +26,9 @@ export async function createRepositoryAndPush(
       private: false,
       auto_init: true,
     })
-  } catch (err: any) {
-    if (err.status === 422) {
+  } catch (err) {
+    const error = err as { status?: number }
+    if (error.status === 422) {
       // Repository might already exist
       repo = await octokit.repos.get({
         owner: GITHUB_OWNER,
@@ -50,8 +51,8 @@ export async function createRepositoryAndPush(
         message: `feat: add ${filePath}`,
         content: Buffer.from(content).toString('base64'),
       })
-    } catch (err: any) {
-      console.error(`Failed to create file ${filePath}:`, err)
+    } catch (e) {
+      console.error(`Failed to create file ${filePath}:`, e)
       // Continue with other files
     }
   }
@@ -80,7 +81,7 @@ export async function getRepositoryUrl(businessName: string): Promise<string> {
       repo: repoName,
     })
     return repo.data.clone_url
-  } catch (err) {
+  } catch {
     throw new Error(`Repository ${repoName} not found`)
   }
 }

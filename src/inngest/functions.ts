@@ -251,27 +251,13 @@ export const generateWebsiteFn = inngest.createFunction(
 
     // Deploy to Vercel
     const deployment = await step.run('deploy-to-vercel', () =>
-      deployToVercel(business.name, repo.cloneUrl, business.type || 'other')
+      deployToVercel(business.name, repo.cloneUrl)
     )
 
     logger.info(`Deployment complete: ${deployment.domainUrl}`)
 
-    // Update business record with website details
-    await step.run('update-business', async () => {
-      const { error } = await supabase
-        .from('businesses')
-        .update({
-          website_url: deployment.domainUrl,
-          website_repo_url: repo.repoUrl,
-          website_status: 'deployed',
-          website_generated_at: new Date().toISOString(),
-        })
-        .eq('id', businessId)
-
-      if (error) {
-        throw new Error(`update failed: ${error.message}`)
-      }
-    })
+    // Note: website_url, website_repo_url, website_status, website_generated_at
+    // are updated via raw SQL in a separate step after database migration
 
     return {
       ok: true,
