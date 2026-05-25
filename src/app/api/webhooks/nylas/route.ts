@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
   const { data: business, error: bizErr } = await supabase
     .from('businesses')
-    .select('id, name, outreach(id, stage, reply_at, email_1_sent_at)')
+    .select('id, name, type, website, website_status, email, outreach(id, stage, reply_at, email_1_sent_at)')
     .ilike('email', fromEmail)
     .maybeSingle()
 
