@@ -111,6 +111,20 @@ export async function POST(request: NextRequest) {
 
   // Handle interested case: send portfolio email and trigger website generation
   if (classification.classification === 'interested') {
+    // Always trigger website generation, regardless of portfolio email success
+    try {
+      await inngest.send({
+        name: 'website/generate.start',
+        data: {
+          business_id: business.id,
+        },
+      })
+      console.log('Website generation event sent for business:', business.id)
+    } catch (err) {
+      console.error('Failed to trigger website generation:', err)
+    }
+
+    // Try to send portfolio email (best effort)
     try {
       const portfolioEmail = await generatePortfolioEmail({
         name: business.name,
@@ -131,23 +145,7 @@ export async function POST(request: NextRequest) {
 
       if (updateErr) {
         console.error('Outreach update failed:', updateErr)
-        return new NextResponse('Portfolio sent but update failed', { status: 500 })
       }
-
-      // Trigger website generation asynchronously
-      try {
-        await inngest.send({
-          name: 'website/generate.start',
-          data: {
-            business_id: business.id,
-          },
-        })
-      } catch (err) {
-        console.error('Failed to trigger website generation:', err)
-        // Don't fail the webhook if generation trigger fails
-      }
-
-      return new NextResponse('OK')
     } catch (err) {
       console.error('Portfolio email generation/send failed:', err)
       // Still record the classification even if email send fails
@@ -158,8 +156,9 @@ export async function POST(request: NextRequest) {
           stage: 'interested',
         })
         .eq('id', unreplied.id)
-      return new NextResponse('Classification recorded; portfolio send failed')
     }
+
+    return new NextResponse('OK')
   }
 
   // Handle not interested case
