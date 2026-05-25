@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { inngest } from '@/inngest/client'
 import { classifyReply } from '@/lib/reply-classifier'
 import { generatePortfolioEmail, sendOutreachEmail } from '@/lib/outreach'
 
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse('Reply recorded; classification failed')
   }
 
-  // Handle interested case: send portfolio email
+  // Handle interested case: send portfolio email and trigger website generation
   if (classification.classification === 'interested') {
     try {
       const portfolioEmail = await generatePortfolioEmail({
@@ -133,6 +134,19 @@ export async function POST(request: NextRequest) {
       if (updateErr) {
         console.error('Outreach update failed:', updateErr)
         return new NextResponse('Portfolio sent but update failed', { status: 500 })
+      }
+
+      // Trigger website generation asynchronously
+      try {
+        await inngest.send({
+          name: 'website/generate.start',
+          data: {
+            business_id: business.id,
+          },
+        })
+      } catch (err) {
+        console.error('Failed to trigger website generation:', err)
+        // Don't fail the webhook if generation trigger fails
       }
 
       return new NextResponse('OK')

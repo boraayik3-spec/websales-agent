@@ -1,6 +1,9 @@
 import { inngest } from './client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateOutreachEmail, sendOutreachEmail, generateFollowupEmail } from '@/lib/outreach'
+import { generateWebsite } from '@/lib/website-generator'
+import { createRepositoryAndPush } from '@/lib/github-helper'
+import { deployToVercel } from '@/lib/vercel-helper'
 
 // Hourly cron: pick the 5 oldest pending outreach rows and fan out send events.
 export const processPendingOutreach = inngest.createFunction(
@@ -196,5 +199,85 @@ export const sendFollowupEmailFn = inngest.createFunction(
     })
 
     return { ok: true, outreach_id: outreachId, subject: email.subject }
+  }
+)
+
+// Event-driven website generation and deployment.
+// Triggered when a business is classified as 'interested'.
+// Generates Next.js website → pushes to GitHub → deploys to Vercel.
+export const generateWebsiteFn = inngest.createFunction(
+  {
+    id: 'generate-website',
+    triggers: [{ event: 'website/generate.start' }],
+    retries: 1,
+  },
+  async ({ event, step, logger }) => {
+    const businessId = event.data.business_id as string
+    const supabase = createAdminClient()
+
+    // Fetch business details
+    const business = await step.run('fetch-business', async () => {
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('id, name, type, email, website, website_status')
+        .eq('id', businessId)
+        .single()
+
+      if (error || !data) {
+        throw new Error(`business not found: ${error?.message ?? 'no row'}`)
+      }
+      return data
+    })
+
+    // Generate Next.js website
+    const generated = await step.run('generate-website', () =>
+      generateWebsite({
+        name: business.name,
+        type: business.type as 'restaurant' | 'salon' | 'shop' | 'service' | 'other' | null,
+        website: business.website,
+        website_status: business.website_status,
+      })
+    )
+
+    // Create GitHub repository and push files
+    const repo = await step.run('push-to-github', () =>
+      createRepositoryAndPush(business.name, {
+        ...generated.files,
+        'package.json': JSON.stringify(generated.packageJson, null, 2),
+      })
+    )
+
+    logger.info(`Repository created: ${repo.repoUrl}`)
+
+    // Deploy to Vercel
+    const deployment = await step.run('deploy-to-vercel', () =>
+      deployToVercel(business.name, repo.cloneUrl, business.type || 'other')
+    )
+
+    logger.info(`Deployment complete: ${deployment.domainUrl}`)
+
+    // Update business record with website details
+    await step.run('update-business', async () => {
+      const { error } = await supabase
+        .from('businesses')
+        .update({
+          website_url: deployment.domainUrl,
+          website_repo_url: repo.repoUrl,
+          website_status: 'deployed',
+          website_generated_at: new Date().toISOString(),
+        })
+        .eq('id', businessId)
+
+      if (error) {
+        throw new Error(`update failed: ${error.message}`)
+      }
+    })
+
+    return {
+      ok: true,
+      business_id: businessId,
+      website_url: deployment.domainUrl,
+      repo_url: repo.repoUrl,
+    }
   }
 )
