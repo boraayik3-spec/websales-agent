@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'node:crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { classifyReply } from '@/lib/reply-classifier'
+import { generatePortfolioEmail, sendOutreachEmail } from '@/lib/outreach'
 
 export const runtime = 'nodejs'
 
@@ -100,7 +101,6 @@ export async function POST(request: NextRequest) {
     classification = await classifyReply(replyText)
   } catch (err) {
     console.error('Classification failed:', err)
-    // Record the reply even if classification fails, so it doesn't get re-processed
     await supabase
       .from('outreach')
       .update({ reply_at: new Date().toISOString(), stage: 'replied' })
@@ -108,13 +108,75 @@ export async function POST(request: NextRequest) {
     return new NextResponse('Reply recorded; classification failed')
   }
 
+  // Handle interested case: send portfolio email
+  if (classification.classification === 'interested') {
+    try {
+      const portfolioEmail = await generatePortfolioEmail({
+        name: business.name,
+        type: business.type,
+        website: business.website,
+        website_status: business.website_status,
+      })
+
+      await sendOutreachEmail(business.email!, portfolioEmail)
+
+      const { error: updateErr } = await supabase
+        .from('outreach')
+        .update({
+          reply_at: new Date().toISOString(),
+          classification: classification.classification,
+          stage: 'portfolio_sent',
+          portfolio_sent_at: new Date().toISOString(),
+        })
+        .eq('id', unreplied.id)
+
+      if (updateErr) {
+        console.error('Outreach update failed:', updateErr)
+        return new NextResponse('Portfolio sent but update failed', { status: 500 })
+      }
+
+      return new NextResponse('OK')
+    } catch (err) {
+      console.error('Portfolio email generation/send failed:', err)
+      // Still record the classification even if email send fails
+      await supabase
+        .from('outreach')
+        .update({
+          reply_at: new Date().toISOString(),
+          classification: classification.classification,
+          stage: 'interested',
+        })
+        .eq('id', unreplied.id)
+      return new NextResponse('Classification recorded; portfolio send failed')
+    }
+  }
+
+  // Handle not interested case
+  if (classification.classification === 'not_interested') {
+    const { error: updateErr } = await supabase
+      .from('outreach')
+      .update({
+        reply_at: new Date().toISOString(),
+        classification: classification.classification,
+        stage: 'uninterested',
+      })
+      .eq('id', unreplied.id)
+
+    if (updateErr) {
+      console.error('Outreach update failed:', updateErr)
+      return new NextResponse('Update failed', { status: 500 })
+    }
+
+    return new NextResponse('OK')
+  }
+
+  // Handle maybe case
   const { error: updateErr } = await supabase
     .from('outreach')
     .update({
       reply_at: new Date().toISOString(),
-      reply_sentiment: classification.sentiment,
-      is_interested: classification.is_interested,
-      stage: classification.is_interested ? 'interested' : 'replied',
+      classification: classification.classification,
+      stage: 'maybe_interested',
     })
     .eq('id', unreplied.id)
 

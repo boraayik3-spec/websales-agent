@@ -1,15 +1,17 @@
 import { anthropic, MODELS } from './anthropic'
 
-export type Sentiment = 'positive' | 'negative' | 'neutral'
+export type Classification = 'interested' | 'not_interested' | 'maybe'
 
 export interface ReplyClassification {
-  sentiment: Sentiment
-  is_interested: boolean
+  classification: Classification
   summary: string
 }
 
 const SYSTEM_PROMPT = `You analyze replies to cold outreach emails offering web design / website-build services to local businesses.
-Classify the sentiment and whether the sender wants to move forward (see a draft, schedule a call, learn more).`
+Classify the sender's interest level into three categories:
+- interested: They want to learn more, see a draft, schedule a call, or move forward
+- not_interested: They explicitly decline, unsubscribe, or are clearly not interested
+- maybe: They're uncertain, need more info, or haven't clearly committed either way`
 
 const CLASSIFY_TOOL = {
   name: 'classify_reply',
@@ -17,21 +19,17 @@ const CLASSIFY_TOOL = {
   input_schema: {
     type: 'object' as const,
     properties: {
-      sentiment: {
+      classification: {
         type: 'string',
-        enum: ['positive', 'negative', 'neutral'],
-        description: 'Overall tone of the reply.',
-      },
-      is_interested: {
-        type: 'boolean',
-        description: 'True if the sender wants to see a draft, hop on a call, or otherwise move forward. False if they decline, unsubscribe, or are clearly uninterested.',
+        enum: ['interested', 'not_interested', 'maybe'],
+        description: 'Classification of the sender\'s interest level.',
       },
       summary: {
         type: 'string',
         description: 'One-sentence summary of the reply.',
       },
     },
-    required: ['sentiment', 'is_interested', 'summary'],
+    required: ['classification', 'summary'],
   },
 }
 
